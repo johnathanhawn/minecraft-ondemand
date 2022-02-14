@@ -11,8 +11,8 @@
 
 function send_notification ()
 {
-  [ "$1" = "startup" ] && MESSAGETEXT="Minecraft container online"
-  [ "$1" = "shutdown" ] && MESSAGETEXT="Shutting down Minecraft Server"
+  [ "$1" = "startup" ] && MESSAGETEXT="Project-zomboid container online"
+  [ "$1" = "shutdown" ] && MESSAGETEXT="Shutting down Project-zomboid Server"
 
   ## Twilio Option
   [ -n "$TWILIOFROM" ] && [ -n "$TWILIOTO" ] && [ -n "$TWILIOAID" ] && [ -n "$TWILIOAUTH" ] && \
@@ -58,7 +58,7 @@ echo "Updating DNS record for $SERVERNAME to $PUBLICIP"
 ## prepare json file
 cat << EOF >> minecraft-dns.json
 {
-  "Comment": "Fargate Public IP change for Minecraft Server",
+  "Comment": "Fargate Public IP change for Project-zomboid Server",
   "Changes": [
     {
       "Action": "UPSERT",
@@ -76,15 +76,15 @@ cat << EOF >> minecraft-dns.json
   ]
 }
 EOF
-aws route53 change-resource-record-sets --hosted-zone-id $DNSZONE --change-batch file://minecraft-dns.json
+aws route53 change-resource-record-sets --hosted-zone-id $DNSZONE --change-batch file://project-zomboid-dns.json
 
 ## detemine java or bedrock based on listening port
-echo "Determining Minecraft edition based on listening port..."
-echo "If we are stuck here, the minecraft container probably failed to start.  Waiting 10 minutes just in case..."
+echo "Determining Project-zomboid based on listening port..."
+echo "If we are stuck here, the Project-zomboid container probably failed to start.  Waiting 10 minutes just in case..."
 COUNTER=0
 while true
 do
-  netstat -atn | grep :25565 | grep LISTEN && EDITION="java" && break
+  netstat -atn | grep :16262 | grep LISTEN && EDITION="java" && break
   netstat -aun | grep :19132 && EDITION="bedrock" && break
   sleep 1
   COUNTER=$(($COUNTER + 1))
@@ -98,13 +98,13 @@ echo "Detected $EDITION edition"
 
 if [ "$EDITION" == "java" ]
 then
-  echo "Waiting for Minecraft RCON to begin listening for connections..."
+  echo "Waiting for Project-zomboid RCON to begin listening for connections..."
   STARTED=0
   while [ $STARTED -lt 1 ]
   do
-    CONNECTIONS=$(netstat -atn | grep :25575 | grep LISTEN | wc -l)
+    CONNECTIONS=$(netstat -atn | grep :27015 | grep LISTEN | wc -l)
     STARTED=$(($STARTED + $CONNECTIONS))
-    if [ $STARTED -gt 0 ] ## minecraft actively listening, break out of loop
+    if [ $STARTED -gt 0 ] ## Project-zomboid actively listening, break out of loop
     then
       echo "RCON is listening, we are ready for clients."
       break
@@ -126,13 +126,13 @@ fi
 ## Send startup notification message
 send_notification startup
 
-echo "Checking every 1 minute for active connections to Minecraft, up to $STARTUPMIN minutes..."
+echo "Checking every 1 minute for active connections to Project-zomboid, up to $STARTUPMIN minutes..."
 COUNTER=0
 CONNECTED=0
 while [ $CONNECTED -lt 1 ]
 do
   echo Waiting for connection, minute $COUNTER out of $STARTUPMIN...
-  [ "$EDITION" == "java" ] && CONNECTIONS=$(netstat -atn | grep :25565 | grep ESTABLISHED | wc -l)
+  [ "$EDITION" == "java" ] && CONNECTIONS=$(netstat -atn | grep :16262 | grep ESTABLISHED | wc -l)
   [ "$EDITION" == "bedrock" ] && CONNECTIONS=$((echo -en "$BEDROCKPING" && sleep 1) | ncat -w 1 -u 127.0.0.1 19132 | cut -c34- | awk -F\; '{ print $5 }')
   [ -n "$CONNECTIONS" ] || CONNECTIONS=0
   CONNECTED=$(($CONNECTED + $CONNECTIONS))
@@ -154,7 +154,7 @@ echo "We believe a connection has been made, switching to shutdown watcher."
 COUNTER=0
 while [ $COUNTER -le $SHUTDOWNMIN ]
 do
-  [ "$EDITION" == "java" ] && CONNECTIONS=$(netstat -atn | grep :25565 | grep ESTABLISHED | wc -l)
+  [ "$EDITION" == "java" ] && CONNECTIONS=$(netstat -atn | grep :16262 | grep ESTABLISHED | wc -l)
   [ "$EDITION" == "bedrock" ] && CONNECTIONS=$((echo -en "$BEDROCKPING" && sleep 1) | ncat -w 1 -u 127.0.0.1 19132 | cut -c34- | awk -F\; '{ print $5 }')
   [ -n "$CONNECTIONS" ] || CONNECTIONS=0
   if [ $CONNECTIONS -lt 1 ]
